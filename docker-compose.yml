@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  qg-engine:
+    build: .
+    container_name: qg-engine
+    restart: unless-stopped
+
+    env_file:
+      - .env    # ton fichier de variables d’environnement existant
+
+    # si tes conteneurs rabbit / postgres sont dans d’autres networks :
+    networks:
+      - pt-net
+
+networks:
+  pt-net: 
+    external: true
