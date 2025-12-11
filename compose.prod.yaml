@@ -1,0 +1,21 @@
+services:
+  engine:
+    image: ghcr.io/${OWNER:-cpe-4irc-eyjafjallajokull}/app-qg-java-engine:${IMAGE_TAG:-latest}
+    container_name: app-qg-java-engine
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - POSTGRES_URL=${POSTGRES_URL}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_POOL_SIZE=${POSTGRES_POOL_SIZE:-5}
+      - POSTGRES_CONNECTION_TIMEOUT_MS=${POSTGRES_CONNECTION_TIMEOUT_MS:-30000}
+      - RABBITMQ_URI=${RABBITMQ_URI}
+      - RABBITMQ_QUEUE=${RABBITMQ_QUEUE:-incidents}
+      - RABBITMQ_QUEUE_DURABLE=${RABBITMQ_QUEUE_DURABLE:-true}
+    restart: unless-stopped
+    networks:
+      - databases
+
+networks:
+  databases:
+    external: true
