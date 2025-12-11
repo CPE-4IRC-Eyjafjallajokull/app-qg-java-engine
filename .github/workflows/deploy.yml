@@ -1,0 +1,136 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["Docker Build & Push"]
+    types:
+      - completed
+    branches: [main]
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+    permissions:
+      contents: read
+      packages: read
+    environment:
+      name: PROD
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Wait for image to propagate to GHCR
+        run: |
+          echo "⏳ Waiting 30 seconds for image to propagate to GHCR..."
+          sleep 30
+          echo "✅ Ready to deploy!"
+
+      - name: Prepare deploy directory
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.ML_DEPLOY_HOST }}
+          username: ${{ secrets.ML_DEPLOY_USER }}
+          key: ${{ secrets.ML_DEPLOY_KEY }}
+          port: ${{ secrets.ML_DEPLOY_PORT }}
+          script_stop: true
+          script: |
+            set -e
+            mkdir -p /opt/mathislambert.fr/applications/app-qg-java-engine
+
+      - name: Upload compose file to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.ML_DEPLOY_HOST }}
+          username: ${{ secrets.ML_DEPLOY_USER }}
+          key: ${{ secrets.ML_DEPLOY_KEY }}
+          port: ${{ secrets.ML_DEPLOY_PORT }}
+          source: "compose.prod.yaml"
+          target: "/opt/mathislambert.fr/applications/app-qg-java-engine"
+
+      - name: Remote deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_POOL_SIZE: ${{ vars.POSTGRES_POOL_SIZE || '5' }}
+          POSTGRES_CONNECTION_TIMEOUT_MS: ${{ vars.POSTGRES_CONNECTION_TIMEOUT_MS || '30000' }}
+          RABBITMQ_URI: ${{ secrets.RABBITMQ_URI }}
+          RABBITMQ_QUEUE: ${{ vars.RABBITMQ_QUEUE }}
+          RABBITMQ_QUEUE_DURABLE: ${{ vars.RABBITMQ_QUEUE_DURABLE || 'true' }}
+        with:
+          host: ${{ secrets.ML_DEPLOY_HOST }}
+          username: ${{ secrets.ML_DEPLOY_USER }}
+          key: ${{ secrets.ML_DEPLOY_KEY }}
+          port: ${{ secrets.ML_DEPLOY_PORT }}
+          script_stop: true
+          envs: GITHUB_REF_NAME,LOG_LEVEL,POSTGRES_URL,POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_POOL_SIZE,POSTGRES_CONNECTION_TIMEOUT_MS,RABBITMQ_URI,RABBITMQ_QUEUE,RABBITMQ_QUEUE_DURABLE
+          script: |
+            set -euo pipefail
+            OWNER='${{ github.repository_owner }}'
+            TAG="$GITHUB_REF_NAME"
+            INSTALL_DIR=/opt/mathislambert.fr/applications/app-qg-java-engine
+            OWNER_LC=$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')
+
+            # Ensure network exists
+            docker network create databases || true
+
+            # Login to GHCR
+            if [ -n '${{ secrets.GITHUB_TOKEN }}' ]; then
+              printf '%s' '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+            fi
+
+            # Set defaults
+            TAG=${TAG:-latest}
+            LOG_LEVEL=${LOG_LEVEL:-INFO}
+            POSTGRES_URL=${POSTGRES_URL:-}
+            POSTGRES_USER=${POSTGRES_USER:-}
+            POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
+            POSTGRES_POOL_SIZE=${POSTGRES_POOL_SIZE:-5}
+            POSTGRES_CONNECTION_TIMEOUT_MS=${POSTGRES_CONNECTION_TIMEOUT_MS:-30000}
+            RABBITMQ_URI=${RABBITMQ_URI:-}
+            RABBITMQ_QUEUE=${RABBITMQ_QUEUE:-incidents}
+            RABBITMQ_QUEUE_DURABLE=${RABBITMQ_QUEUE_DURABLE:-true}
+
+            if [ -z "$POSTGRES_URL" ] || [ -z "$RABBITMQ_URI" ]; then
+              echo "POSTGRES_URL and RABBITMQ_URI must be provided" >&2
+              exit 1
+            fi
+
+            mkdir -p "$INSTALL_DIR"
+            cd "$INSTALL_DIR"
+
+            # Pull latest image
+            OWNER="$OWNER_LC" IMAGE_TAG="$TAG" docker compose -f compose.prod.yaml pull
+
+            # Deploy with environment variables
+            OWNER="$OWNER_LC" IMAGE_TAG="$TAG" \
+              LOG_LEVEL="$LOG_LEVEL" \
+              POSTGRES_URL="$POSTGRES_URL" \
+              POSTGRES_USER="$POSTGRES_USER" \
+              POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+              POSTGRES_POOL_SIZE="$POSTGRES_POOL_SIZE" \
+              POSTGRES_CONNECTION_TIMEOUT_MS="$POSTGRES_CONNECTION_TIMEOUT_MS" \
+              RABBITMQ_URI="$RABBITMQ_URI" \
+              RABBITMQ_QUEUE="$RABBITMQ_QUEUE" \
+              RABBITMQ_QUEUE_DURABLE="$RABBITMQ_QUEUE_DURABLE" \
+              docker compose -f compose.prod.yaml up -d --remove-orphans
+
+            # Cleanup old images
+            docker image prune -f || true
+
+            echo "✅ Deployment completed successfully!"
