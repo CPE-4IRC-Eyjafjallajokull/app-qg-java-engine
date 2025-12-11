@@ -16,8 +16,6 @@ Copy `.env.example` to `.env` and set the values:
 - `RABBITMQ_URI` (amqp uri)  
   `RABBITMQ_QUEUE`, `RABBITMQ_QUEUE_DURABLE`
 
-Legacy DSN keys were removed; only the keys above are used.
-
 ## Build and test
 ```bash
 mvn test
