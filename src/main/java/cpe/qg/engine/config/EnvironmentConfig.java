@@ -2,10 +2,8 @@ package cpe.qg.engine.config;
 
 import io.github.cdimascio.dotenv.Dotenv;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -33,7 +31,6 @@ public final class EnvironmentConfig {
 
         RabbitConfig rabbit = new RabbitConfig(
                 env.required("RABBITMQ_URI"),
-                env.optionalList("RABBITMQ_QUEUES", env.optional("RABBITMQ_QUEUE", "incidents")),
                 env.optionalBoolean("RABBITMQ_QUEUE_DURABLE", true));
 
         PostgresConfig postgres = new PostgresConfig(
@@ -95,19 +92,6 @@ public final class EnvironmentConfig {
                 return fallback;
             }
             return Boolean.parseBoolean(value.trim());
-        }
-
-        List<String> optionalList(String key, String fallback) {
-            String raw = values.get(key);
-            String source = (raw == null || raw.isBlank()) ? fallback : raw;
-            if (source == null || source.isBlank()) {
-                return List.of();
-            }
-
-            return Arrays.stream(source.split(","))
-                    .map(String::trim)
-                    .filter(entry -> !entry.isEmpty())
-                    .toList();
         }
 
         int optionalInt(String key, int fallback) {

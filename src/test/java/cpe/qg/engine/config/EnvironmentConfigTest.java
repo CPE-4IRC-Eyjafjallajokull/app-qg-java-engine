@@ -13,17 +13,17 @@ class EnvironmentConfigTest {
     void loadsRabbitAndPostgresFromOverrides() {
         Map<String, String> overrides = Map.of(
                 "RABBITMQ_URI", "amqp://guest:guest@localhost:5672",
+                "RABBITMQ_QUEUE_DURABLE", "false",
                 "POSTGRES_URL", "jdbc:postgresql://localhost:5432/qg",
                 "POSTGRES_USER", "app",
                 "POSTGRES_PASSWORD", "secret",
-                "POSTGRES_POOL_SIZE", "10",
-                "RABBITMQ_QUEUE", "demo"
+                "POSTGRES_POOL_SIZE", "10"
         );
 
         EnvironmentConfig config = EnvironmentConfig.from(overrides);
 
         assertThat(config.rabbit().uri()).isEqualTo("amqp://guest:guest@localhost:5672");
-        assertThat(config.rabbit().queueName()).isEqualTo("demo");
+        assertThat(config.rabbit().durableQueue()).isFalse();
         assertThat(config.postgres().jdbcUrl()).isEqualTo("jdbc:postgresql://localhost:5432/qg");
         assertThat(config.postgres().username()).isEqualTo("app");
         assertThat(config.postgres().password()).isEqualTo("secret");

@@ -1,6 +1,6 @@
 # QG Java Engine
 
-Lightweight Java 17 engine that connects to RabbitMQ and PostgreSQL, loads configuration from a `.env` file, and exposes a simple connectivity probe as its entrypoint.
+Lightweight Java 17 engine that connects to RabbitMQ and PostgreSQL, loads configuration from a `.env` file, and listens to a single RabbitMQ queue while routing messages by their `event` key.
 
 ## Prerequisites
 - Java 17+
@@ -14,7 +14,9 @@ Copy `.env.example` to `.env` and set the values:
 - `POSTGRES_URL` (jdbc url)  
   `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_POOL_SIZE`, `POSTGRES_CONNECTION_TIMEOUT_MS`
 - `RABBITMQ_URI` (amqp uri)  
-  `RABBITMQ_QUEUES` (comma-separated; falls back to `RABBITMQ_QUEUE`), `RABBITMQ_QUEUE_DURABLE`
+  `RABBITMQ_QUEUE_DURABLE`
+
+Queues and their direction (SUB/PUB) are defined in `src/main/java/cpe/qg/engine/events/Queues.java`.
 
 ## Build and test
 ```bash
@@ -27,7 +29,39 @@ The assembly plugin creates `target/app-qg-java-engine-1.0-SNAPSHOT-jar-with-dep
 ```bash
 java -jar target/app-qg-java-engine-1.0-SNAPSHOT-jar-with-dependencies.jar
 ```
-The `App` entrypoint runs connectivity checks against RabbitMQ and PostgreSQL, then subscribes to the configured RabbitMQ queues and logs every incoming message. Clean shutdown on `Ctrl+C` closes RabbitMQ and PostgreSQL resources.
+The `App` entrypoint runs connectivity checks against RabbitMQ and PostgreSQL, then listens to the queues defined in `Queues` and dispatches each message based on its `event` field. Clean shutdown on `Ctrl+C` closes RabbitMQ and PostgreSQL resources.
+
+## Add event handlers
+Messages consumed from the subscribed queues must contain an `event` field, e.g.:
+```json
+{"event":"new_incident","data":{...}}
+```
+To react to new events:
+1. Declare the event key in `Events` (see `src/main/java/cpe/qg/engine/events/Events.java`).
+2. Implement `EventHandler` with the matching `eventKey()` and business logic:
+```java
+class CustomHandler implements EventHandler {
+    private final MessageBrokerClient broker;
+    private final boolean durable;
+    CustomHandler(MessageBrokerClient broker, boolean durable) { this.broker = broker; this.durable = durable; }
+
+    @Override
+    public String eventKey() { return Events.NEW_INCIDENT.key(); }
+
+    @Override
+    public void handle(EventMessage message) {
+        broker.declareQueue(Events.INCIDENT_ACK.key(), durable);
+        broker.publish(Events.INCIDENT_ACK.key(), "{\"status\":\"received\"}");
+    }
+}
+```
+3. Register the handler in `App.buildHandlers(...)`:
+```java
+private static List<EventHandler> buildHandlers(RabbitConfig config, RabbitMqClient broker) {
+    return List.of(new CustomHandler(broker, config.durableQueue()));
+}
+```
+The app listens to all queues marked as `SUB` in `Queues` and dispatches every message to the handler matching the `event` key.
 
 ## Docker
 Build and run with Docker:
@@ -41,4 +75,5 @@ docker run --env-file .env --network pt-net qg-engine
 - `src/main/java/cpe/qg/engine/logging` – SLF4J/Logback setup
 - `src/main/java/cpe/qg/engine/database` – PostgreSQL connector (HikariCP)
 - `src/main/java/cpe/qg/engine/messaging` – RabbitMQ connector
-- `src/main/java/cpe/qg/engine/service` – connectivity probe and message pipeline wiring
+- `src/main/java/cpe/qg/engine/events` – events, queues, handlers, and listener
+- `src/main/java/cpe/qg/engine/service` – connectivity probe

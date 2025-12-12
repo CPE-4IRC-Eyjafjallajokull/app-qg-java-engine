@@ -70,7 +70,6 @@ jobs:
           POSTGRES_POOL_SIZE: ${{ vars.POSTGRES_POOL_SIZE || '5' }}
           POSTGRES_CONNECTION_TIMEOUT_MS: ${{ vars.POSTGRES_CONNECTION_TIMEOUT_MS || '30000' }}
           RABBITMQ_URI: ${{ secrets.RABBITMQ_URI }}
-          RABBITMQ_QUEUE: ${{ vars.RABBITMQ_QUEUE }}
           RABBITMQ_QUEUE_DURABLE: ${{ vars.RABBITMQ_QUEUE_DURABLE || 'true' }}
         with:
           host: ${{ secrets.ML_DEPLOY_HOST }}
@@ -78,7 +77,7 @@ jobs:
           key: ${{ secrets.ML_DEPLOY_KEY }}
           port: ${{ secrets.ML_DEPLOY_PORT }}
           script_stop: true
-          envs: GITHUB_REF_NAME,LOG_LEVEL,POSTGRES_URL,POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_POOL_SIZE,POSTGRES_CONNECTION_TIMEOUT_MS,RABBITMQ_URI,RABBITMQ_QUEUE,RABBITMQ_QUEUE_DURABLE
+          envs: GITHUB_REF_NAME,LOG_LEVEL,POSTGRES_URL,POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_POOL_SIZE,POSTGRES_CONNECTION_TIMEOUT_MS,RABBITMQ_URI,RABBITMQ_QUEUE_DURABLE
           script: |
             set -euo pipefail
             OWNER='${{ github.repository_owner }}'
@@ -103,7 +102,6 @@ jobs:
             POSTGRES_POOL_SIZE=${POSTGRES_POOL_SIZE:-5}
             POSTGRES_CONNECTION_TIMEOUT_MS=${POSTGRES_CONNECTION_TIMEOUT_MS:-30000}
             RABBITMQ_URI=${RABBITMQ_URI:-}
-            RABBITMQ_QUEUE=${RABBITMQ_QUEUE:-incidents}
             RABBITMQ_QUEUE_DURABLE=${RABBITMQ_QUEUE_DURABLE:-true}
 
             if [ -z "$POSTGRES_URL" ] || [ -z "$RABBITMQ_URI" ]; then
@@ -126,7 +124,6 @@ jobs:
               POSTGRES_POOL_SIZE="$POSTGRES_POOL_SIZE" \
               POSTGRES_CONNECTION_TIMEOUT_MS="$POSTGRES_CONNECTION_TIMEOUT_MS" \
               RABBITMQ_URI="$RABBITMQ_URI" \
-              RABBITMQ_QUEUE="$RABBITMQ_QUEUE" \
               RABBITMQ_QUEUE_DURABLE="$RABBITMQ_QUEUE_DURABLE" \
               docker compose -f compose.prod.yaml up -d --remove-orphans
 
