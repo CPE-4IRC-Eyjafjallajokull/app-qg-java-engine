@@ -83,7 +83,7 @@ public class RabbitMqClient implements MessageBrokerClient {
 
     @Override
     public void healthCheck() {
-        declareQueue(config.queueName(), config.durableQueue());
+        config.queues().forEach(queue -> declareQueue(queue, config.durableQueue()));
     }
 
     private void ensureConnected() {

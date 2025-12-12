@@ -14,7 +14,7 @@ Copy `.env.example` to `.env` and set the values:
 - `POSTGRES_URL` (jdbc url)  
   `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_POOL_SIZE`, `POSTGRES_CONNECTION_TIMEOUT_MS`
 - `RABBITMQ_URI` (amqp uri)  
-  `RABBITMQ_QUEUE`, `RABBITMQ_QUEUE_DURABLE`
+  `RABBITMQ_QUEUES` (comma-separated; falls back to `RABBITMQ_QUEUE`), `RABBITMQ_QUEUE_DURABLE`
 
 ## Build and test
 ```bash
@@ -27,10 +27,7 @@ The assembly plugin creates `target/app-qg-java-engine-1.0-SNAPSHOT-jar-with-dep
 ```bash
 java -jar target/app-qg-java-engine-1.0-SNAPSHOT-jar-with-dependencies.jar
 ```
-The `App` entrypoint runs connectivity checks against RabbitMQ and PostgreSQL, then stays alive:
-- Consumes messages from queue `test_event` and logs them.
-- Publishes a sample JSON payload to queue `test_pub` on startup.
-- Clean shutdown on `Ctrl+C` (closes RabbitMQ and PostgreSQL resources).
+The `App` entrypoint runs connectivity checks against RabbitMQ and PostgreSQL, then subscribes to the configured RabbitMQ queues and logs every incoming message. Clean shutdown on `Ctrl+C` closes RabbitMQ and PostgreSQL resources.
 
 ## Docker
 Build and run with Docker:
