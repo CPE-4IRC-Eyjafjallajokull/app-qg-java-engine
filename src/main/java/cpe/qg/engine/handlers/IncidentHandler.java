@@ -1,5 +1,7 @@
-package cpe.qg.engine.events;
+package cpe.qg.engine.handlers;
 
+import cpe.qg.engine.events.EventMessage;
+import cpe.qg.engine.events.Events;
 import cpe.qg.engine.logging.LoggerProvider;
 import cpe.qg.engine.messaging.MessageBrokerClient;
 import cpe.qg.engine.messaging.Queues;

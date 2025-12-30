@@ -1,5 +1,6 @@
 package cpe.qg.engine.events;
 
+import cpe.qg.engine.handlers.EventHandler;
 import cpe.qg.engine.logging.LoggerProvider;
 import org.slf4j.Logger;
 

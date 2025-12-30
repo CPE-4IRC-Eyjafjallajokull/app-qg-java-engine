@@ -1,4 +1,6 @@
-package cpe.qg.engine.events;
+package cpe.qg.engine.handlers;
+
+import cpe.qg.engine.events.EventMessage;
 
 /**
  * Handles a specific event key coming from the shared RabbitMQ queue.
