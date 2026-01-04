@@ -4,12 +4,12 @@ import java.sql.Connection;
 import java.sql.SQLException;
 
 public interface DatabaseClient extends AutoCloseable {
-    void connect();
+  void connect();
 
-    void healthCheck();
+  void healthCheck();
 
-    Connection getConnection() throws SQLException;
+  Connection getConnection() throws SQLException;
 
-    @Override
-    void close();
+  @Override
+  void close();
 }
