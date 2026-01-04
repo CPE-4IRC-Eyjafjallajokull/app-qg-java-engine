@@ -15,6 +15,9 @@ Copy `.env.example` to `.env` and set the values:
   `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_POOL_SIZE`, `POSTGRES_CONNECTION_TIMEOUT_MS`
 - `RABBITMQ_URI` (amqp uri)  
   `RABBITMQ_QUEUE_DURABLE`
+- `KEYCLOAK_ISSUER`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` (for SDMIS API access)
+- `SDMIS_API_BASE_URL`, `SDMIS_API_TIMEOUT_MS` (defaults to `http://localhost:3001`)
+- `DECISION_MAX_DISTANCE_KM`, `DECISION_MIN_ENERGY_LEVEL` (optional decision filters)
 
 Queues and their direction (SUB/PUB) are defined in `src/main/java/cpe/qg/engine/events/Queues.java`.
 
