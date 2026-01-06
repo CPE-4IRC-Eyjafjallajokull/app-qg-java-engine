@@ -39,6 +39,21 @@ jobs:
           distribution: "temurin"
           cache: "maven"
 
+      - name: Configuration Maven
+        run: |
+          mkdir -p ~/.m2
+          cat > ~/.m2/settings.xml << 'EOF'
+          <settings>
+            <mirrors>
+              <mirror>
+                <id>central-mirror</id>
+                <mirrorOf>central</mirrorOf>
+                <url>https://repo1.maven.org/maven2</url>
+              </mirror>
+            </mirrors>
+          </settings>
+          EOF
+
       - name: Initialisation de CodeQL
         uses: github/codeql-action/init@v3
         with:
@@ -53,7 +68,9 @@ jobs:
               - src/main
 
       - name: Build avec Maven
-        run: mvn clean compile -DskipTests
+        run: mvn -B clean compile -DskipTests
+        env:
+          MAVEN_OPTS: "-Dmaven.wagon.http.retryHandler.count=3"
 
       - name: Analyse de sécurité CodeQL
         uses: github/codeql-action/analyze@v3
