@@ -3,15 +3,9 @@ name: CodeQL SAST
 on:
   push:
     branches: [main]
-    paths:
-      - "**.java"
-      - "pom.xml"
 
   pull_request:
     branches: [main]
-    paths:
-      - "**.java"
-      - "pom.xml"
 
   schedule:
     - cron: "0 5 * * 3"
