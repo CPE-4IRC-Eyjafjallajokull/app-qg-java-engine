@@ -28,7 +28,7 @@ jobs:
           cache: maven
 
       - name: Run OWASP Dependency-Check
-        run: mvn -B -ntp -DskipTests org.owasp:dependency-check-maven:10.0.4:aggregate
+        run: mvn -B -ntp -DskipTests org.owasp:dependency-check-maven:12.1.3:aggregate
         continue-on-error: true
 
   docker-scan:
