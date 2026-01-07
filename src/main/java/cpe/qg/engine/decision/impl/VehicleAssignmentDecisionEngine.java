@@ -6,9 +6,11 @@ import cpe.qg.engine.decision.api.ScoredCandidate;
 import cpe.qg.engine.decision.api.VehicleScoringStrategy;
 import cpe.qg.engine.decision.model.DecisionCriteria;
 import cpe.qg.engine.decision.model.DecisionResult;
+import cpe.qg.engine.decision.model.GeoPoint;
+import cpe.qg.engine.decision.model.RouteGeometry;
+import cpe.qg.engine.decision.model.TravelEstimate;
 import cpe.qg.engine.decision.model.VehicleAssignmentProposal;
 import cpe.qg.engine.logging.LoggerProvider;
-import cpe.qg.engine.sdmis.dto.InterestPointRead;
 import cpe.qg.engine.sdmis.dto.QGActivePhase;
 import cpe.qg.engine.sdmis.dto.QGIncidentSituationRead;
 import cpe.qg.engine.sdmis.dto.QGPhaseRequirements;
@@ -16,9 +18,7 @@ import cpe.qg.engine.sdmis.dto.QGPhaseTypeRef;
 import cpe.qg.engine.sdmis.dto.QGRequirement;
 import cpe.qg.engine.sdmis.dto.QGRequirementGroup;
 import cpe.qg.engine.sdmis.dto.QGResourcePlanningRead;
-import cpe.qg.engine.sdmis.dto.VehicleAssignmentRead;
-import cpe.qg.engine.sdmis.dto.VehiclePositionLogRead;
-import cpe.qg.engine.sdmis.dto.VehicleRead;
+import cpe.qg.engine.sdmis.dto.QGVehicleRead;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -29,7 +29,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 
 /** Decision engine that proposes vehicles for active incident phases. */
@@ -58,10 +57,13 @@ public final class VehicleAssignmentDecisionEngine implements DecisionEngine {
       QGIncidentSituationRead situation = dataSource.getIncidentSituation(incidentId);
       QGResourcePlanningRead planning = dataSource.getResourcePlanning(incidentId);
 
-      GeoPosition incidentLocation = toIncidentPosition(situation);
+      GeoPoint incidentLocation = toIncidentPosition(situation);
       Map<UUID, QGActivePhase> phasesByType = selectPhasesByType(situation.phasesActive());
-      Map<UUID, List<VehicleCandidate>> candidatePool =
-          buildCandidatePool(planning, incidentLocation);
+      Map<UUID, Integer> remainingByType = new HashMap<>(extractAvailableVehicleTypes(planning));
+      List<QGVehicleRead> vehicles = dataSource.listVehicles();
+      Set<UUID> requiredVehicleTypes = extractRequiredVehicleTypes(planning);
+      Map<UUID, List<VehicleCandidate>> candidatesByType =
+          buildCandidatesByType(vehicles, requiredVehicleTypes, incidentLocation);
 
       Set<UUID> allocatedVehicles = new HashSet<>();
       Map<UUID, Integer> missingByType = new HashMap<>();
@@ -74,11 +76,21 @@ public final class VehicleAssignmentDecisionEngine implements DecisionEngine {
         if (phase.phaseType() == null || phase.phaseType().phaseTypeId() == null) {
           continue;
         }
+        List<QGRequirementGroup> groups = phase.groups() == null ? List.of() : phase.groups();
+        if (groups.isEmpty()) {
+          log.warn(
+              "Phase type {} has no assignment groups configured",
+              phase.phaseType().code() == null
+                  ? phase.phaseType().phaseTypeId()
+                  : phase.phaseType().code());
+          continue;
+        }
         QGActivePhase selectedPhase = phasesByType.get(phase.phaseType().phaseTypeId());
         if (selectedPhase == null || selectedPhase.incidentPhaseId() == null) {
           continue;
         }
-        List<QGRequirementGroup> groups = phase.groups() == null ? List.of() : phase.groups();
+        Map<UUID, List<VehicleCandidate>> phasePool =
+            buildPhaseCandidatePool(groups, candidatesByType, allocatedVehicles, remainingByType);
         List<QGRequirementGroup> orderedGroups = new ArrayList<>(groups);
         orderedGroups.sort(Comparator.comparing(this::groupPriorityKey));
 
@@ -90,16 +102,17 @@ public final class VehicleAssignmentDecisionEngine implements DecisionEngine {
             if (count <= 0) {
               continue;
             }
-            List<VehicleCandidate> candidates =
-                candidatePool.getOrDefault(vehicleTypeId, List.of());
+            List<VehicleCandidate> candidates = phasePool.getOrDefault(vehicleTypeId, List.of());
             int selected =
                 selectCandidates(
                     candidates,
                     allocatedVehicles,
+                    remainingByType,
                     proposals,
                     incidentId,
                     selectedPhase,
                     phase.phaseType(),
+                    vehicleTypeId,
                     count);
             if (selected < count) {
               missingByType.merge(vehicleTypeId, count - selected, Integer::sum);
@@ -117,16 +130,13 @@ public final class VehicleAssignmentDecisionEngine implements DecisionEngine {
     }
   }
 
-  private GeoPosition toIncidentPosition(QGIncidentSituationRead situation) {
+  private GeoPoint toIncidentPosition(QGIncidentSituationRead situation) {
     if (situation == null || situation.incident() == null) {
       return null;
     }
-    Double latitude = situation.incident().latitude();
-    Double longitude = situation.incident().longitude();
-    if (latitude == null || longitude == null) {
-      return null;
-    }
-    return new GeoPosition(latitude, longitude);
+    GeoPoint point =
+        new GeoPoint(situation.incident().latitude(), situation.incident().longitude());
+    return point.isDefined() ? point : null;
   }
 
   private Map<UUID, QGActivePhase> selectPhasesByType(List<QGActivePhase> phases) {
@@ -146,53 +156,108 @@ public final class VehicleAssignmentDecisionEngine implements DecisionEngine {
     return selected;
   }
 
-  private Map<UUID, List<VehicleCandidate>> buildCandidatePool(
-      QGResourcePlanningRead planning, GeoPosition incidentLocation)
-      throws IOException, InterruptedException {
-    Set<UUID> requiredVehicleTypes = extractRequiredVehicleTypes(planning);
-    List<VehicleAssignmentRead> assignments = dataSource.listActiveAssignments();
-    Set<UUID> activeAssignments =
-        assignments == null
-            ? Set.of()
-            : assignments.stream()
-                .map(VehicleAssignmentRead::vehicleId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-
-    Map<UUID, InterestPointRead> interestPointCache = new HashMap<>();
+  private Map<UUID, List<VehicleCandidate>> buildCandidatesByType(
+      List<QGVehicleRead> vehicles, Set<UUID> requiredVehicleTypes, GeoPoint incidentLocation) {
     Map<UUID, List<VehicleCandidate>> pool = new HashMap<>();
+    if (vehicles == null || vehicles.isEmpty()) {
+      return pool;
+    }
 
-    for (UUID vehicleTypeId : requiredVehicleTypes) {
-      List<VehicleRead> vehicles = dataSource.listVehicles(vehicleTypeId);
-      if (vehicles == null) {
+    for (QGVehicleRead vehicle : vehicles) {
+      if (vehicle == null || vehicle.vehicleId() == null || vehicle.vehicleType() == null) {
         continue;
       }
-      List<VehicleCandidate> candidates = new ArrayList<>();
-      for (VehicleRead vehicle : vehicles) {
-        if (vehicle == null || vehicle.vehicleId() == null) {
-          continue;
+      UUID vehicleTypeId = vehicle.vehicleType().vehicleTypeId();
+      if (vehicleTypeId == null || !requiredVehicleTypes.contains(vehicleTypeId)) {
+        continue;
+      }
+      if (vehicle.activeAssignment() != null) {
+        continue;
+      }
+      GeoPoint vehiclePosition = resolveVehiclePosition(vehicle);
+      Double distanceKm = null;
+      Double estimatedTimeMin = null;
+      RouteGeometry routeGeometry = null;
+      if (incidentLocation != null && vehiclePosition != null) {
+        TravelEstimate travelEstimate =
+            resolveTravelEstimate(vehicle, vehiclePosition, incidentLocation);
+        if (travelEstimate != null) {
+          if (travelEstimate.distanceKm() != null) {
+            distanceKm = travelEstimate.distanceKm();
+          }
+          estimatedTimeMin = travelEstimate.durationMinutes();
+          routeGeometry = travelEstimate.routeGeometry();
         }
-        if (activeAssignments.contains(vehicle.vehicleId())) {
-          continue;
-        }
-        GeoPosition vehiclePosition = resolveVehiclePosition(vehicle, interestPointCache);
-        Double distanceKm = null;
-        if (incidentLocation != null && vehiclePosition != null) {
+        if (distanceKm == null && incidentLocation.isDefined() && vehiclePosition.isDefined()) {
           distanceKm = distanceKm(incidentLocation, vehiclePosition);
         }
-        if (!matchesCriteria(vehicle, distanceKm)) {
-          continue;
-        }
-        ScoredCandidate scored = scoringStrategy.score(vehicle, distanceKm);
-        candidates.add(
-            new VehicleCandidate(
-                vehicle, vehiclePosition, distanceKm, scored.score(), scored.rationale()));
       }
+      if (!matchesCriteria(vehicle, distanceKm)) {
+        continue;
+      }
+      ScoredCandidate scored = scoringStrategy.score(vehicle, distanceKm, estimatedTimeMin);
+      pool.computeIfAbsent(vehicleTypeId, ignored -> new ArrayList<>())
+          .add(
+              new VehicleCandidate(
+                  vehicle,
+                  vehiclePosition,
+                  distanceKm,
+                  estimatedTimeMin,
+                  routeGeometry,
+                  scored.score(),
+                  scored.rationale()));
+    }
+
+    for (List<VehicleCandidate> candidates : pool.values()) {
       candidates.sort(candidateComparator());
-      pool.put(vehicleTypeId, candidates);
     }
 
     return pool;
+  }
+
+  private Map<UUID, List<VehicleCandidate>> buildPhaseCandidatePool(
+      List<QGRequirementGroup> groups,
+      Map<UUID, List<VehicleCandidate>> candidatesByType,
+      Set<UUID> allocatedVehicles,
+      Map<UUID, Integer> remainingByType) {
+    Map<UUID, List<VehicleCandidate>> phasePool = new HashMap<>();
+    Set<UUID> phaseVehicleTypes = new HashSet<>();
+    for (QGRequirementGroup group : groups) {
+      if (group.requirements() == null) {
+        continue;
+      }
+      group.requirements().stream()
+          .map(req -> req.vehicleType() == null ? null : req.vehicleType().vehicleTypeId())
+          .filter(Objects::nonNull)
+          .forEach(phaseVehicleTypes::add);
+    }
+    for (UUID vehicleTypeId : phaseVehicleTypes) {
+      int remaining = remainingByType.getOrDefault(vehicleTypeId, 0);
+      if (remaining <= 0) {
+        continue;
+      }
+      List<VehicleCandidate> candidates = candidatesByType.getOrDefault(vehicleTypeId, List.of());
+      if (candidates.isEmpty()) {
+        continue;
+      }
+      List<VehicleCandidate> filtered = new ArrayList<>();
+      for (VehicleCandidate candidate : candidates) {
+        if (candidate.vehicle() == null || candidate.vehicle().vehicleId() == null) {
+          continue;
+        }
+        if (allocatedVehicles.contains(candidate.vehicle().vehicleId())) {
+          continue;
+        }
+        filtered.add(candidate);
+        if (filtered.size() >= remaining) {
+          break;
+        }
+      }
+      if (!filtered.isEmpty()) {
+        phasePool.put(vehicleTypeId, filtered);
+      }
+    }
+    return phasePool;
   }
 
   private Set<UUID> extractRequiredVehicleTypes(QGResourcePlanningRead planning) {
@@ -217,33 +282,67 @@ public final class VehicleAssignmentDecisionEngine implements DecisionEngine {
     return vehicleTypeIds;
   }
 
-  private GeoPosition resolveVehiclePosition(
-      VehicleRead vehicle, Map<UUID, InterestPointRead> interestPointCache)
-      throws IOException, InterruptedException {
-    List<VehiclePositionLogRead> positions =
-        dataSource.listVehiclePositionLogs(vehicle.vehicleId(), 1);
-    if (positions != null && !positions.isEmpty()) {
-      VehiclePositionLogRead latest = positions.get(0);
-      if (latest.latitude() != null && latest.longitude() != null) {
-        return new GeoPosition(latest.latitude(), latest.longitude());
+  private Map<UUID, Integer> extractAvailableVehicleTypes(QGResourcePlanningRead planning) {
+    Map<UUID, Integer> availableByType = new HashMap<>();
+    if (planning == null || planning.availability() == null) {
+      return availableByType;
+    }
+    for (var availability : planning.availability()) {
+      if (availability == null || availability.vehicleType() == null) {
+        continue;
       }
+      UUID vehicleTypeId = availability.vehicleType().vehicleTypeId();
+      if (vehicleTypeId == null) {
+        continue;
+      }
+      int available = availability.available() == null ? 0 : availability.available();
+      availableByType.merge(vehicleTypeId, available, Integer::sum);
     }
-
-    if (vehicle.baseInterestPointId() == null) {
-      return null;
-    }
-    InterestPointRead point = interestPointCache.get(vehicle.baseInterestPointId());
-    if (point == null) {
-      point = dataSource.getInterestPoint(vehicle.baseInterestPointId());
-      interestPointCache.put(vehicle.baseInterestPointId(), point);
-    }
-    if (point == null || point.latitude() == null || point.longitude() == null) {
-      return null;
-    }
-    return new GeoPosition(point.latitude(), point.longitude());
+    return availableByType;
   }
 
-  private boolean matchesCriteria(VehicleRead vehicle, Double distanceKm) {
+  private GeoPoint resolveVehiclePosition(QGVehicleRead vehicle) {
+    if (vehicle.currentPosition() != null
+        && vehicle.currentPosition().latitude() != null
+        && vehicle.currentPosition().longitude() != null) {
+      return new GeoPoint(
+          vehicle.currentPosition().latitude(), vehicle.currentPosition().longitude());
+    }
+    if (vehicle.baseInterestPoint() != null
+        && vehicle.baseInterestPoint().latitude() != null
+        && vehicle.baseInterestPoint().longitude() != null) {
+      return new GeoPoint(
+          vehicle.baseInterestPoint().latitude(), vehicle.baseInterestPoint().longitude());
+    }
+    return null;
+  }
+
+  private TravelEstimate resolveTravelEstimate(
+      QGVehicleRead vehicle, GeoPoint vehiclePosition, GeoPoint incidentLocation) {
+    if (vehiclePosition == null
+        || incidentLocation == null
+        || !vehiclePosition.isDefined()
+        || !incidentLocation.isDefined()) {
+      return null;
+    }
+    try {
+      return dataSource.estimateTravel(vehiclePosition, incidentLocation);
+    } catch (IllegalStateException e) {
+      log.warn("Routing API call failed for vehicle {}: {}", vehicle.vehicleId(), e.getMessage());
+      return null;
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("Travel estimation interrupted", e);
+    } catch (IOException e) {
+      log.warn(
+          "Failed to fetch route estimate for vehicle {} ({}). Using fallback distance.",
+          vehicle.vehicleId(),
+          e.getMessage());
+      return null;
+    }
+  }
+
+  private boolean matchesCriteria(QGVehicleRead vehicle, Double distanceKm) {
     if (criteria == null) {
       return true;
     }
@@ -269,18 +368,29 @@ public final class VehicleAssignmentDecisionEngine implements DecisionEngine {
         .reversed()
         .thenComparing(
             candidate ->
+                candidate.estimatedTimeMin() == null
+                    ? Double.MAX_VALUE
+                    : candidate.estimatedTimeMin())
+        .thenComparing(
+            candidate ->
                 candidate.distanceKm() == null ? Double.MAX_VALUE : candidate.distanceKm());
   }
 
   private int selectCandidates(
       List<VehicleCandidate> candidates,
       Set<UUID> allocatedVehicles,
+      Map<UUID, Integer> remainingByType,
       List<VehicleAssignmentProposal> proposals,
       UUID incidentId,
       QGActivePhase phase,
       QGPhaseTypeRef phaseType,
+      UUID vehicleTypeId,
       int count) {
     int selected = 0;
+    int remaining = remainingByType.getOrDefault(vehicleTypeId, 0);
+    if (remaining <= 0) {
+      return selected;
+    }
     for (VehicleCandidate candidate : candidates) {
       if (candidate.vehicle() == null || candidate.vehicle().vehicleId() == null) {
         continue;
@@ -290,21 +400,25 @@ public final class VehicleAssignmentDecisionEngine implements DecisionEngine {
       }
       proposals.add(
           new VehicleAssignmentProposal(
-              incidentId,
               phase.incidentPhaseId(),
-              phaseType.phaseTypeId(),
               candidate.vehicle().vehicleId(),
-              candidate.vehicle().vehicleTypeId(),
               candidate.distanceKm(),
+              candidate.estimatedTimeMin(),
+              candidate.routeGeometry(),
               candidate.vehicle().energyLevel(),
               candidate.score(),
               candidate.rationale()));
       allocatedVehicles.add(candidate.vehicle().vehicleId());
       selected++;
+      remaining--;
       if (selected >= count) {
         break;
       }
+      if (remaining <= 0) {
+        break;
+      }
     }
+    remainingByType.put(vehicleTypeId, remaining);
     if (selected < count) {
       log.debug(
           "Missing {} vehicles of type {} for phase {}",
@@ -323,7 +437,7 @@ public final class VehicleAssignmentDecisionEngine implements DecisionEngine {
     return group.priority() == null ? Integer.MAX_VALUE : group.priority();
   }
 
-  private static double distanceKm(GeoPosition from, GeoPosition to) {
+  private static double distanceKm(GeoPoint from, GeoPoint to) {
     double lat1 = Math.toRadians(from.latitude());
     double lon1 = Math.toRadians(from.longitude());
     double lat2 = Math.toRadians(to.latitude());
@@ -339,12 +453,12 @@ public final class VehicleAssignmentDecisionEngine implements DecisionEngine {
     return 6371.0 * c;
   }
 
-  private record GeoPosition(double latitude, double longitude) {}
-
   private record VehicleCandidate(
-      VehicleRead vehicle,
-      GeoPosition position,
+      QGVehicleRead vehicle,
+      GeoPoint position,
       Double distanceKm,
+      Double estimatedTimeMin,
+      RouteGeometry routeGeometry,
       double score,
       String rationale) {}
 

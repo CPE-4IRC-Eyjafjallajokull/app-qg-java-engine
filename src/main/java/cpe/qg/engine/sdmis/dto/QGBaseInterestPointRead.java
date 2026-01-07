@@ -4,11 +4,11 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.UUID;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record InterestPointRead(
+public record QGBaseInterestPointRead(
     UUID interestPointId,
     String name,
     String address,
-    String city,
     String zipcode,
+    String city,
     Double latitude,
     Double longitude) {}

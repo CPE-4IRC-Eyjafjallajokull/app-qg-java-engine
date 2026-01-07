@@ -68,6 +68,13 @@ public final class SdmisApiClient {
     return objectMapper.readValue(response.body(), responseType);
   }
 
+  public <T> T postJson(String path, Object payload, Class<T> responseType)
+      throws IOException, InterruptedException {
+    HttpResponse<String> response = postJson(path, payload);
+    ensureSuccess(response);
+    return objectMapper.readValue(response.body(), responseType);
+  }
+
   private HttpResponse<String> sendJson(String method, String path, Object payload)
       throws IOException, InterruptedException {
     String json = toJson(payload);

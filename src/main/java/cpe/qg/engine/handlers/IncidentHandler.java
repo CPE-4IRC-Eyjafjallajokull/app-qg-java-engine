@@ -56,10 +56,9 @@ public class IncidentHandler implements EventHandler {
       publishDecisionProposal(incidentId, result);
     } else if (incidentId == null) {
       log.warn("Unable to extract incident_id from event payload");
+    } else {
+      log.warn("No decision engine configured, skipping assignment proposal");
     }
-    String ackPayload = acknowledgementPayload(message.rawPayload());
-    brokerClient.publish(Queues.SDMIS_API.queue(), ackPayload);
-    log.info("Sent incident acknowledgement to {}: {}", Queues.SDMIS_API.queue(), ackPayload);
   }
 
   private void ensureApiQueue() {
@@ -68,19 +67,13 @@ public class IncidentHandler implements EventHandler {
     }
   }
 
-  private String acknowledgementPayload(String incomingPayload) {
-    return """
-                {"event":"%s","receivedAt":"%s","originalPayload":%s}
-                """
-        .formatted(Events.INCIDENT_ACK.key(), Instant.now(), wrapPayload(incomingPayload));
-  }
-
   private void publishDecisionProposal(UUID incidentId, DecisionResult result) {
     if (result == null) {
       return;
     }
     Map<String, Object> payload = new LinkedHashMap<>();
-    payload.put("incident_id", incidentId);
+    payload.put("proposal_id", UUID.randomUUID().toString());
+    payload.put("incident_id", incidentId.toString());
     payload.put("generated_at", Instant.now().toString());
     payload.put("proposals", proposalPayload(result.proposals()));
     payload.put("missing_by_vehicle_type", missingPayload(result.missingByVehicleType()));
@@ -106,12 +99,11 @@ public class IncidentHandler implements EventHandler {
     List<Map<String, Object>> payload = new ArrayList<>();
     for (VehicleAssignmentProposal proposal : proposals) {
       Map<String, Object> item = new LinkedHashMap<>();
-      item.put("incident_id", proposal.incidentId());
       item.put("incident_phase_id", proposal.incidentPhaseId());
-      item.put("phase_type_id", proposal.phaseTypeId());
       item.put("vehicle_id", proposal.vehicleId());
-      item.put("vehicle_type_id", proposal.vehicleTypeId());
       item.put("distance_km", proposal.distanceKm());
+      item.put("estimated_time_min", proposal.estimatedTimeMin());
+      item.put("route_geometry", proposal.routeGeometry());
       item.put("energy_level", proposal.energyLevel());
       item.put("score", proposal.score());
       item.put("rationale", proposal.rationale());
@@ -181,16 +173,5 @@ public class IncidentHandler implements EventHandler {
       log.warn(
           "Missing vehicle types for incident {}: {}", incidentId, result.missingByVehicleType());
     }
-  }
-
-  private String wrapPayload(String payload) {
-    if (payload == null || payload.isBlank()) {
-      return "\"\"";
-    }
-    String trimmed = payload.trim();
-    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-      return trimmed;
-    }
-    return "\"%s\"".formatted(trimmed.replace("\"", "\\\""));
   }
 }

@@ -1,14 +1,17 @@
 package cpe.qg.engine.decision.impl;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import cpe.qg.engine.decision.api.DecisionDataSource;
+import cpe.qg.engine.decision.model.GeoPoint;
+import cpe.qg.engine.decision.model.RouteGeometry;
+import cpe.qg.engine.decision.model.TravelEstimate;
 import cpe.qg.engine.sdmis.SdmisApiClient;
-import cpe.qg.engine.sdmis.dto.InterestPointRead;
 import cpe.qg.engine.sdmis.dto.QGIncidentSituationRead;
 import cpe.qg.engine.sdmis.dto.QGResourcePlanningRead;
-import cpe.qg.engine.sdmis.dto.VehicleAssignmentRead;
-import cpe.qg.engine.sdmis.dto.VehiclePositionLogRead;
-import cpe.qg.engine.sdmis.dto.VehicleRead;
+import cpe.qg.engine.sdmis.dto.QGRoutePoint;
+import cpe.qg.engine.sdmis.dto.QGRouteRequest;
+import cpe.qg.engine.sdmis.dto.QGRouteResponse;
+import cpe.qg.engine.sdmis.dto.QGVehicleRead;
+import cpe.qg.engine.sdmis.dto.QGVehiclesListRead;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
@@ -16,12 +19,6 @@ import java.util.UUID;
 
 /** SDMIS API-backed data source for decision making. */
 public final class SdmisDecisionDataSource implements DecisionDataSource {
-
-  private static final TypeReference<List<VehicleRead>> VEHICLE_LIST = new TypeReference<>() {};
-  private static final TypeReference<List<VehicleAssignmentRead>> ASSIGNMENT_LIST =
-      new TypeReference<>() {};
-  private static final TypeReference<List<VehiclePositionLogRead>> POSITION_LIST =
-      new TypeReference<>() {};
 
   private final SdmisApiClient client;
 
@@ -45,30 +42,35 @@ public final class SdmisDecisionDataSource implements DecisionDataSource {
   }
 
   @Override
-  public List<VehicleRead> listVehicles(UUID vehicleTypeId)
-      throws IOException, InterruptedException {
-    return client.getJsonList(
-        "/vehicles?vehicle_type_id=%s".formatted(vehicleTypeId), VEHICLE_LIST);
+  public List<QGVehicleRead> listVehicles() throws IOException, InterruptedException {
+    QGVehiclesListRead response = client.getJson("/qg/vehicles", QGVehiclesListRead.class);
+    if (response == null || response.vehicles() == null) {
+      return List.of();
+    }
+    return response.vehicles();
   }
 
   @Override
-  public List<VehicleAssignmentRead> listActiveAssignments()
+  public TravelEstimate estimateTravel(GeoPoint from, GeoPoint to)
       throws IOException, InterruptedException {
-    return client.getJsonList("/vehicles/assignments?active_only=true", ASSIGNMENT_LIST);
-  }
-
-  @Override
-  public List<VehiclePositionLogRead> listVehiclePositionLogs(UUID vehicleId, int limit)
-      throws IOException, InterruptedException {
-    return client.getJsonList(
-        "/vehicles/position-logs?vehicle_id=%s&limit=%d".formatted(vehicleId, limit),
-        POSITION_LIST);
-  }
-
-  @Override
-  public InterestPointRead getInterestPoint(UUID interestPointId)
-      throws IOException, InterruptedException {
-    return client.getJson(
-        "/interest-points/%s".formatted(interestPointId), InterestPointRead.class);
+    if (from == null || to == null || !from.isDefined() || !to.isDefined()) {
+      return null;
+    }
+    QGRouteRequest request =
+        new QGRouteRequest(
+            new QGRoutePoint(from.latitude(), from.longitude()),
+            new QGRoutePoint(to.latitude(), to.longitude()),
+            false);
+    QGRouteResponse response = client.postJson("/geo/route", request, QGRouteResponse.class);
+    if (response == null) {
+      return null;
+    }
+    Double distanceKm = response.distanceM() == null ? null : response.distanceM() / 1000.0;
+    Double durationMinutes = response.durationS() == null ? null : response.durationS() / 60.0;
+    RouteGeometry geometry =
+        response.geometry() == null
+            ? null
+            : new RouteGeometry(response.geometry().type(), response.geometry().coordinates());
+    return new TravelEstimate(distanceKm, durationMinutes, geometry);
   }
 }

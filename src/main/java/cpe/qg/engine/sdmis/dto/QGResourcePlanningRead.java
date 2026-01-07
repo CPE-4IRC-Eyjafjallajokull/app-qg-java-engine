@@ -6,4 +6,6 @@ import java.util.UUID;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record QGResourcePlanningRead(
-    UUID incidentId, List<QGPhaseRequirements> phaseRequirements) {}
+    UUID incidentId,
+    List<QGPhaseRequirements> phaseRequirements,
+    List<QGPhaseVehicleAvailability> availability) {}
