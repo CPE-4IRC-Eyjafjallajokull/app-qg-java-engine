@@ -23,6 +23,7 @@ services:
     restart: unless-stopped
     networks:
       - databases
+      - proxy
 
 networks:
   databases:

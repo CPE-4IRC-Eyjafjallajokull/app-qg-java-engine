@@ -71,12 +71,12 @@ jobs:
           POSTGRES_CONNECTION_TIMEOUT_MS: ${{ vars.POSTGRES_CONNECTION_TIMEOUT_MS || '30000' }}
           RABBITMQ_URI: ${{ secrets.RABBITMQ_URI }}
           RABBITMQ_QUEUE_DURABLE: ${{ vars.RABBITMQ_QUEUE_DURABLE || 'true' }}
-          KEYCLOAK_ISSUER: ${{ vars.KEYCLOAK_ISSUER || 'http://localhost:8080/realms/sdmis' }}
+          KEYCLOAK_ISSUER: ${{ secrets.KEYCLOAK_ISSUER || 'http://localhost:8080/realms/sdmis' }}
           KEYCLOAK_CLIENT_ID: ${{ secrets.KEYCLOAK_CLIENT_ID }}
           KEYCLOAK_CLIENT_SECRET: ${{ secrets.KEYCLOAK_CLIENT_SECRET }}
           KEYCLOAK_TIMEOUT_MS: ${{ vars.KEYCLOAK_TIMEOUT_MS || '3000' }}
           KEYCLOAK_TOKEN_EXPIRY_SKEW_SECONDS: ${{ vars.KEYCLOAK_TOKEN_EXPIRY_SKEW_SECONDS || '30' }}
-          SDMIS_API_BASE_URL: ${{ vars.SDMIS_API_BASE_URL || 'http://localhost:3001' }}
+          SDMIS_API_BASE_URL: ${{ secrets.SDMIS_API_BASE_URL || 'http://localhost:3001' }}
           SDMIS_API_TIMEOUT_MS: ${{ vars.SDMIS_API_TIMEOUT_MS || '5000' }}
           DECISION_MAX_DISTANCE_KM: ${{ vars.DECISION_MAX_DISTANCE_KM || '' }}
           DECISION_MIN_ENERGY_LEVEL: ${{ vars.DECISION_MIN_ENERGY_LEVEL || '' }}
