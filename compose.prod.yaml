@@ -28,3 +28,5 @@ services:
 networks:
   databases:
     external: true
+  proxy:
+    external: true

@@ -96,6 +96,7 @@ jobs:
 
             # Ensure network exists
             docker network create databases || true
+            docker network create proxy || true
 
             # Login to GHCR
             if [ -n '${{ secrets.GITHUB_TOKEN }}' ]; then
