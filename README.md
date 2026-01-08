@@ -1,9 +1,9 @@
 # QG Java Engine
 
-Lightweight Java 17 engine that connects to RabbitMQ and PostgreSQL, loads configuration from a `.env` file, and listens to a single RabbitMQ queue while routing messages by their `event` key.
+Lightweight Java 21 engine that connects to RabbitMQ and PostgreSQL, loads configuration from a `.env` file, and listens to a single RabbitMQ queue while routing messages by their `event` key.
 
 ## Prerequisites
-- Java 17+
+- Java 21+
 - Maven 3.9+
 - RabbitMQ and PostgreSQL reachable from the app (or the docker-compose services)
 
