@@ -127,33 +127,22 @@ public class IncidentHandler implements EventHandler {
     if (message == null || message.body() == null) {
       return null;
     }
-    String id = null;
-    if (message.body().hasNonNull("incident")) {
-      id = extractIncidentIdFromNode(message.body().get("incident"));
+    JsonNode payloadNode = message.body().get("payload");
+    if (payloadNode == null) {
+      log.warn("Missing payload in event message");
+      return null;
     }
-    if (id == null && message.body().hasNonNull("payload")) {
-      id = extractIncidentIdFromNode(message.body().get("payload").get("incident"));
-    }
-    if (id == null || id.isBlank()) {
+    JsonNode idNode = payloadNode.get("incident_id");
+    if (idNode == null || !idNode.isTextual()) {
+      log.warn("Missing or invalid incident_id in payload");
       return null;
     }
     try {
-      return UUID.fromString(id);
+      return UUID.fromString(idNode.asText());
     } catch (IllegalArgumentException e) {
-      log.warn("Invalid incident_id in payload: {}", id);
+      log.warn("Invalid incident_id format: {}", idNode.asText());
       return null;
     }
-  }
-
-  private String extractIncidentIdFromNode(JsonNode node) {
-    if (node == null || node.isNull()) {
-      return null;
-    }
-    JsonNode idNode = node.get("incident_id");
-    if (idNode == null || !idNode.isTextual()) {
-      return null;
-    }
-    return idNode.asText();
   }
 
   private void logDecisionResult(UUID incidentId, DecisionResult result) {

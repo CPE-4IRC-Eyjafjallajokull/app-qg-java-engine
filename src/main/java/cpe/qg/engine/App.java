@@ -37,7 +37,10 @@ public class App {
     RabbitConfig rabbitConfig = env.rabbit();
     RabbitMqClient rabbitMqClient = new RabbitMqClient(rabbitConfig);
     // print rabbitmq config for debugging
-    log.info("RabbitMQ Config: uri={}, durableQueue={}", rabbitConfig.uri(), rabbitConfig.durableQueue());
+    log.info(
+        "RabbitMQ Config: uri={}, durableQueue={}",
+        rabbitConfig.uri(),
+        rabbitConfig.durableQueue());
     List<EventHandler> handlers = buildHandlers(env, rabbitConfig, rabbitMqClient);
     EventDispatcher dispatcher = new EventDispatcher(handlers);
     QueueListener queueListener =

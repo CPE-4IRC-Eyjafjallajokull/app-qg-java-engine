@@ -35,7 +35,12 @@ public final class DistanceEnergyScoringStrategy implements VehicleScoringStrate
     double score = (weightedDistance + weightedTime + (energyScore * ENERGY_WEIGHT)) / weightSum;
     String rationale =
         "distance_km=%s, estimated_time_min=%s, energy_level=%s"
-            .formatted(distanceKm, estimatedTimeMin, vehicle.energyLevel());
+            .formatted(
+                distanceKm != null ? String.format("%.2f", distanceKm) : null,
+                estimatedTimeMin != null ? String.format("%.2f", estimatedTimeMin) : null,
+                vehicle.energyLevel() != null
+                    ? String.format("%.2f", vehicle.energyLevel())
+                    : null);
     return new ScoredCandidate(score, rationale);
   }
 
