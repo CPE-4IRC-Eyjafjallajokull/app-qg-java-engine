@@ -2,9 +2,8 @@ package cpe.qg.engine.events;
 
 /** Central registry of RabbitMQ events used by the engine. */
 public enum Events {
-  NEW_INCIDENT("new_incident"),
-  INCIDENT_ACK("incident_ack"),
-  VEHICLE_ASSIGNMENT_PROPOSAL("vehicle_assignment_proposal");
+  ASSIGNMENT_REQUEST("assignment_request"),
+  ASSIGNMENT_PROPOSAL("assignment_proposal");
 
   private final String key;
 
