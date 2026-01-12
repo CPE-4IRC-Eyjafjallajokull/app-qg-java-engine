@@ -2,7 +2,7 @@ package cpe.qg.engine.decision.model;
 
 import java.util.UUID;
 
-/** Proposed vehicle assignment with a score and rationale for auditing. */
+/** Proposed vehicle assignment with a score. */
 public record VehicleAssignmentProposal(
     UUID incidentPhaseId,
     UUID vehicleId,
@@ -11,4 +11,4 @@ public record VehicleAssignmentProposal(
     RouteGeometry routeGeometry,
     Double energyLevel,
     double score,
-    String rationale) {}
+    int rank) {}

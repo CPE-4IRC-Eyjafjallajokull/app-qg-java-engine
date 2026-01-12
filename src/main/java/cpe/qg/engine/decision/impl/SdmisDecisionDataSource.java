@@ -6,7 +6,6 @@ import cpe.qg.engine.decision.model.RouteGeometry;
 import cpe.qg.engine.decision.model.TravelEstimate;
 import cpe.qg.engine.sdmis.SdmisApiClient;
 import cpe.qg.engine.sdmis.dto.QGIncidentSituationRead;
-import cpe.qg.engine.sdmis.dto.QGResourcePlanningRead;
 import cpe.qg.engine.sdmis.dto.QGRoutePoint;
 import cpe.qg.engine.sdmis.dto.QGRouteRequest;
 import cpe.qg.engine.sdmis.dto.QGRouteResponse;
@@ -31,14 +30,6 @@ public final class SdmisDecisionDataSource implements DecisionDataSource {
       throws IOException, InterruptedException {
     return client.getJson(
         "/qg/incidents/%s/situation".formatted(incidentId), QGIncidentSituationRead.class);
-  }
-
-  @Override
-  public QGResourcePlanningRead getResourcePlanning(UUID incidentId)
-      throws IOException, InterruptedException {
-    return client.getJson(
-        "/qg/incidents/%s/planification-ressources".formatted(incidentId),
-        QGResourcePlanningRead.class);
   }
 
   @Override

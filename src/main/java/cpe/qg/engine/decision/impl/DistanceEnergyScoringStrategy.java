@@ -30,18 +30,10 @@ public final class DistanceEnergyScoringStrategy implements VehicleScoringStrate
     }
 
     if (weightSum <= 0.0) {
-      return new ScoredCandidate(0.0, "No metrics available for scoring");
+      return new ScoredCandidate(0.0);
     }
     double score = (weightedDistance + weightedTime + (energyScore * ENERGY_WEIGHT)) / weightSum;
-    String rationale =
-        "distance_km=%s, estimated_time_min=%s, energy_level=%s"
-            .formatted(
-                distanceKm != null ? String.format("%.2f", distanceKm) : null,
-                estimatedTimeMin != null ? String.format("%.2f", estimatedTimeMin) : null,
-                vehicle.energyLevel() != null
-                    ? String.format("%.2f", vehicle.energyLevel())
-                    : null);
-    return new ScoredCandidate(score, rationale);
+    return new ScoredCandidate(score);
   }
 
   private double invertPositive(Double value) {

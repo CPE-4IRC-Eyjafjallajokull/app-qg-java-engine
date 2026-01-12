@@ -9,8 +9,8 @@ import cpe.qg.engine.decision.impl.SdmisDecisionDataSource;
 import cpe.qg.engine.decision.impl.VehicleAssignmentDecisionEngine;
 import cpe.qg.engine.events.EventDispatcher;
 import cpe.qg.engine.events.EventPayloadParser;
+import cpe.qg.engine.handlers.AssignmentRequestHandler;
 import cpe.qg.engine.handlers.EventHandler;
-import cpe.qg.engine.handlers.IncidentHandler;
 import cpe.qg.engine.logging.LoggerProvider;
 import cpe.qg.engine.messaging.QueueListener;
 import cpe.qg.engine.messaging.Queues;
@@ -89,9 +89,9 @@ public class App {
             new SdmisDecisionDataSource(sdmisApiClient),
             new DistanceEnergyScoringStrategy(),
             env.decisionCriteria());
-    IncidentHandler incidentHandler =
-        new IncidentHandler(brokerClient, rabbitConfig.durableQueue(), decisionEngine);
-    return List.of(incidentHandler);
+    AssignmentRequestHandler assignmentRequestHandler =
+        new AssignmentRequestHandler(brokerClient, rabbitConfig.durableQueue(), decisionEngine);
+    return List.of(assignmentRequestHandler);
   }
 
   private static void closeQuietly(AutoCloseable resource, String name) {

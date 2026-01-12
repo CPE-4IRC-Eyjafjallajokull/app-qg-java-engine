@@ -37,7 +37,7 @@ The `App` entrypoint runs connectivity checks against RabbitMQ and PostgreSQL, t
 ## Add event handlers
 Messages consumed from the subscribed queues must contain an `event` field, e.g.:
 ```json
-{"event":"new_incident","data":{...}}
+{"event":"assignment_request","payload":{...}}
 ```
 To react to new events:
 1. Declare the event key in `Events` (see `src/main/java/cpe/qg/engine/events/Events.java`).
@@ -49,7 +49,7 @@ class CustomHandler implements EventHandler {
     CustomHandler(MessageBrokerClient broker, boolean durable) { this.broker = broker; this.durable = durable; }
 
     @Override
-    public String eventKey() { return Events.NEW_INCIDENT.key(); }
+    public String eventKey() { return Events.ASSIGNMENT_REQUEST.key(); }
 
     @Override
     public void handle(EventMessage message) {
