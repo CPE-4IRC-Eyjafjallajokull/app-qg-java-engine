@@ -15,4 +15,5 @@ public record QGVehicleRead(
     QGBaseInterestPointRead baseInterestPoint,
     QGVehiclePositionRead currentPosition,
     List<QGVehicleConsumableStockRead> consumableStocks,
+    Boolean referencedInPendingProposal,
     QGActiveAssignmentRead activeAssignment) {}

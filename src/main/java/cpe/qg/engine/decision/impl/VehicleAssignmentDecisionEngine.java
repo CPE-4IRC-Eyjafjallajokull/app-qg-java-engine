@@ -169,6 +169,9 @@ public final class VehicleAssignmentDecisionEngine implements DecisionEngine {
       if (vehicle.activeAssignment() != null) {
         continue;
       }
+      if (Boolean.TRUE.equals(vehicle.referencedInPendingProposal())) {
+        continue;
+      }
       GeoPoint vehiclePosition = resolveVehiclePosition(vehicle);
       Double distanceKm = null;
       Double estimatedTimeMin = null;
